@@ -1,125 +1,99 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR Compatibility Tester</title>
+    <title>Honor AR Ultra-Compatible</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .status-card {
-            transition: all 0.3s ease;
-        }
-        .supported { border-left: 8px solid #10b981; background-color: #f0fdf4; }
-        .not-supported { border-left: 8px solid #ef4444; background-color: #fef2f2; }
-        .checking { border-left: 8px solid #f59e0b; background-color: #fffbeb; }
-    </style>
 </head>
-<body class="bg-gray-100 min-h-screen p-4 md:p-8 font-sans">
-    <div class="max-w-2xl mx-auto">
-        <header class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">WebXR Device Tester</h1>
-            <p class="text-gray-600">Checking compatibility for your Honor Foldable</p>
-        </header>
+<body class="bg-gray-900 text-white overflow-hidden">
+    <div id="overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 text-center">
+        <div class="bg-gray-800 p-8 rounded-3xl shadow-2xl border border-gray-700 max-w-sm">
+            <h1 class="text-2xl font-bold mb-4">Honor AR Fix</h1>
+            <p id="status" class="text-gray-400 mb-6 text-sm">Ready to initialize camera...</p>
+            
+            <button id="start-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-2xl transition-all transform active:scale-95">
+                LAUNCH AR
+            </button>
 
-        <div id="results" class="space-y-4">
-            <!-- WebXR API Support -->
-            <div id="api-check" class="status-card checking p-6 rounded-lg shadow-sm">
-                <h2 class="text-xl font-semibold mb-1">WebXR API</h2>
-                <p id="api-status" class="text-gray-700 italic">Checking for navigator.xr...</p>
-            </div>
-
-            <!-- Immersive VR Support -->
-            <div id="vr-check" class="status-card checking p-6 rounded-lg shadow-sm">
-                <h2 class="text-xl font-semibold mb-1">Immersive VR</h2>
-                <p id="vr-status" class="text-gray-700 italic">Checking VR capabilities...</p>
-                <p class="text-xs text-gray-500 mt-2">Required for VR headsets/Cardboard mode.</p>
-            </div>
-
-            <!-- Immersive AR Support -->
-            <div id="ar-check" class="status-card checking p-6 rounded-lg shadow-sm">
-                <h2 class="text-xl font-semibold mb-1">Immersive AR (Augmented Reality)</h2>
-                <p id="ar-status" class="text-gray-700 italic">Checking AR capabilities...</p>
-                <p class="text-xs text-gray-500 mt-2">Required for placing 3D objects in your real room.</p>
+            <div id="console" class="mt-6 text-left font-mono text-[10px] text-green-400 bg-black p-3 rounded-lg h-32 overflow-y-auto border border-gray-600">
+                > System check passed...
             </div>
         </div>
-
-        <div class="mt-8 p-6 bg-white rounded-lg shadow-md">
-            <h3 class="font-bold text-lg mb-3">Device Info</h3>
-            <ul class="space-y-2 text-sm text-gray-600">
-                <li><strong>Browser:</strong> <span id="user-agent"></span></li>
-                <li><strong>Screen:</strong> <span id="screen-res"></span></li>
-                <li><strong>Fold State:</strong> <span class="italic text-blue-600">Note: WebXR works best on the large inner screen.</span></li>
-            </ul>
-        </div>
-
-        <footer class="mt-8 text-center text-gray-400 text-xs">
-            WebXR requires a secure (HTTPS) connection and a compatible browser like Chrome.
-        </footer>
     </div>
 
     <script>
-        document.getElementById('user-agent').textContent = navigator.userAgent;
-        document.getElementById('screen-res').textContent = window.innerWidth + " x " + window.innerHeight;
+        const startBtn = document.getElementById('start-btn');
+        const status = document.getElementById('status');
+        const consoleLog = document.getElementById('console');
 
-        async function checkWebXR() {
-            const apiCard = document.getElementById('api-check');
-            const apiStatus = document.getElementById('api-status');
+        function log(msg, color = "text-green-400") {
+            consoleLog.innerHTML += `<div class="${color}">> ${msg}</div>`;
+            consoleLog.scrollTop = consoleLog.scrollHeight;
+        }
+
+        async function initAR() {
+            log("Requesting Session...");
             
-            const vrCard = document.getElementById('vr-check');
-            const vrStatus = document.getElementById('vr-status');
-            
-            const arCard = document.getElementById('ar-check');
-            const arStatus = document.getElementById('ar-status');
+            try {
+                // We request NO required features first to ensure the session starts
+                const session = await navigator.xr.requestSession('immersive-ar', {
+                    optionalFeatures: ['local', 'hit-test', 'dom-overlay'],
+                    domOverlay: { root: document.body }
+                });
 
-            // 1. Check if the API exists
-            if ('xr' in navigator) {
-                apiCard.className = "status-card supported p-6 rounded-lg shadow-sm";
-                apiStatus.textContent = "✅ WebXR API is available in this browser.";
+                log("Session Granted", "text-blue-400");
 
-                // 2. Check for VR Support
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.xr.enabled = true;
+                await renderer.xr.setSession(session);
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+                // Add a floating cube
+                const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+                const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+                const cube = new THREE.Mesh(geometry, material);
+                cube.position.set(0, 0, -0.3); // 30cm in front
+                scene.add(cube);
+
+                log("Attempting Reference Space...");
+
+                let refSpace;
                 try {
-                    const vrSupported = await navigator.xr.isSessionSupported('immersive-vr');
-                    if (vrSupported) {
-                        vrCard.className = "status-card supported p-6 rounded-lg shadow-sm";
-                        vrStatus.textContent = "✅ Supported: This device can run Virtual Reality experiences.";
-                    } else {
-                        vrCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
-                        vrStatus.textContent = "❌ Not Supported: Immersive VR is not available.";
-                    }
+                    // Try 'local' (World tracking)
+                    refSpace = await session.requestReferenceSpace('local');
+                    log("Success: Local Space active");
                 } catch (e) {
-                    vrCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
-                    vrStatus.textContent = "❌ Error checking VR: " + e.message;
+                    log("Local Space failed, trying Viewer...", "text-yellow-400");
+                    // Fallback to 'viewer' (This ALMOST ALWAYS works if the camera works)
+                    refSpace = await session.requestReferenceSpace('viewer');
+                    log("Success: Viewer Space active");
                 }
 
-                // 3. Check for AR Support
-                try {
-                    const arSupported = await navigator.xr.isSessionSupported('immersive-ar');
-                    if (arSupported) {
-                        arCard.className = "status-card supported p-6 rounded-lg shadow-sm";
-                        arStatus.textContent = "✅ Supported: This device can run Augmented Reality (AR) experiences.";
-                    } else {
-                        arCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
-                        arStatus.textContent = "❌ Not Supported: ARCore might be missing or disabled.";
-                    }
-                } catch (e) {
-                    arCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
-                    arStatus.textContent = "❌ Error checking AR: " + e.message;
-                }
+                document.getElementById('overlay').style.display = 'none';
 
-            } else {
-                apiCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
-                apiStatus.textContent = "❌ WebXR API not found. Please use Chrome or a Chromium-based browser.";
-                
-                vrCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
-                vrStatus.textContent = "❌ Not Available";
-                
-                arCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
-                arStatus.textContent = "❌ Not Available";
+                renderer.setAnimationLoop((timestamp, frame) => {
+                    cube.rotation.y += 0.02;
+                    renderer.render(scene, camera);
+                });
+
+                session.addEventListener("end", () => {
+                    log("Session Ended");
+                    location.reload();
+                });
+
+            } catch (err) {
+                log("CRITICAL ERROR: " + err.message, "text-red-500");
+                status.innerText = "Error: " + err.name;
             }
         }
 
-        // Run check on load
-        checkWebXR();
+        startBtn.addEventListener('click', initAR);
     </script>
 </body>
 </html>
