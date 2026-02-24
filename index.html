@@ -2,104 +2,79 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>MSC-301: Markerless AR Fixed</title>
-    <!-- Updated to 1.6.0 for better WebXR support -->
+    <title>AR Debugger</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <style>
-      #overlay {
+      #debug-ui {
         position: fixed;
-        top: 20px;
-        left: 0;
-        width: 100%;
-        display: none; /* Hidden until AR starts */
-        z-index: 10;
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        z-index: 9999;
+        background: rgba(0,0,0,0.8);
+        color: #0f0;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 12px;
+        border-radius: 5px;
         pointer-events: none;
       }
-      .instructions {
-        margin: 0 auto;
-        width: fit-content;
-        background: rgba(0,0,0,0.7);
-        color: white;
-        padding: 15px;
-        border-radius: 15px;
-        font-family: sans-serif;
-        text-align: center;
-      }
+      /* This hides the blue loading screen */
+      .a-loader-title { display: none !important; }
     </style>
   </head>
   <body>
 
-    <div id="overlay">
-      <div class="instructions">
-        <b>Surface Detected!</b><br>
-        Tap the screen to place the box.
-      </div>
+    <div id="debug-ui">
+      Status: Initializing...<br>
+      WebXR Support: Checking...<br>
+      HTTPS: Checking...
     </div>
 
     <!-- 
-      1. Added 'renderer' with alpha:true to prevent black screen.
-      2. Simplified hit-test settings.
+      loading-screen="enabled: false" removes the blue screen 
     -->
     <a-scene 
-      webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: #overlay;"
-      renderer="antialias: true; alpha: true; colorManagement: true;"
-      xr-mode-ui="XRMode: ar">
+      loading-screen="enabled: false"
+      webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: #debug-ui;"
+      renderer="alpha: true;">
       
-      <a-light type="ambient" intensity="0.5"></a-light>
-      <a-light type="directional" position="1 1 1" intensity="0.8"></a-light>
-
-      <!-- The Reticle: Shows where the floor is -->
-      <a-entity id="reticle" ar-hit-test="target: #reticle; type: footprint;" visible="false">
-        <a-ring rotation="-90 0 0" radius-inner="0.08" radius-outer="0.12" color="#4CC3D9"></a-ring>
+      <a-entity id="reticle" ar-hit-test="target: #reticle;">
+        <a-ring rotation="-90 0 0" radius-inner="0.08" radius-outer="0.12" color="cyan"></a-ring>
       </a-entity>
 
-      <!-- The Object to be placed -->
-      <a-box id="placed-object" 
-             visible="false" 
-             scale="0.3 0.3 0.3" 
-             material="color: #FF9500; metalness: 0.5; roughness: 0.2;">
-      </a-box>
+      <a-box id="box" visible="false" scale="0.2 0.2 0.2" material="color: red;"></a-box>
 
       <a-entity camera></a-entity>
     </a-scene>
 
     <script>
+      const status = document.getElementById('debug-ui');
       const scene = document.querySelector('a-scene');
-      const reticle = document.querySelector('#reticle');
-      const object = document.querySelector('#placed-object');
-      const overlay = document.querySelector('#overlay');
+      
+      // 1. Check HTTPS
+      const isHttps = window.location.protocol === 'https:';
+      
+      // 2. Check WebXR Support
+      const hasWebXR = navigator.xr !== undefined;
 
-      // Show the instructions only when we enter AR
-      scene.addEventListener('enter-vr', () => {
-        if (scene.is('ar-mode')) {
-          overlay.style.display = 'block';
-        }
-      });
+      function updateDebug() {
+        status.innerHTML = `
+          HTTPS: ${isHttps ? "✅ YES" : "❌ NO (AR will fail)"}<br>
+          WebXR API: ${hasWebXR ? "✅ YES" : "❌ NO (Use Chrome/Safari)"}<br>
+          Mode: ${scene.is('ar-mode') ? "ACTIVE AR" : "Waiting for 'Enter AR' click..."}
+        `;
+      }
 
-      // Hide instructions when exiting
-      scene.addEventListener('exit-vr', () => {
-        overlay.style.display = 'none';
-      });
+      setInterval(updateDebug, 500);
 
-      // Placement logic
+      // Placement Logic
       scene.addEventListener('click', () => {
-        // Only place if the reticle has found a floor
+        const reticle = document.getElementById('reticle');
+        const box = document.getElementById('box');
         if (reticle.getAttribute('visible')) {
-          // Get the reticle's current position
-          const position = reticle.getAttribute('position');
-          
-          // Move object and show it
-          object.setAttribute('position', position);
-          object.setAttribute('visible', 'true');
-          
-          // Optional: Add a little "pop" animation when placing
-          object.setAttribute('animation', {
-            property: 'scale',
-            from: '0 0 0',
-            to: '0.3 0.3 0.3',
-            dur: 500,
-            easing: 'easeOutElastic'
-          });
+          box.setAttribute('position', reticle.getAttribute('position'));
+          box.setAttribute('visible', 'true');
         }
       });
     </script>
