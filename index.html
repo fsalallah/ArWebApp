@@ -2,79 +2,127 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>AR Debugger</title>
+    <title>AR Placement Lab</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <style>
-      #debug-ui {
+      #overlay {
         position: fixed;
-        top: 10px;
-        left: 10px;
-        right: 10px;
-        z-index: 9999;
-        background: rgba(0,0,0,0.8);
-        color: #0f0;
-        padding: 10px;
-        font-family: monospace;
-        font-size: 12px;
-        border-radius: 5px;
+        top: 20px;
+        left: 0;
+        width: 100%;
+        z-index: 1000;
         pointer-events: none;
+        font-family: sans-serif;
+        display: none; /* Hidden until AR starts */
       }
-      /* This hides the blue loading screen */
-      .a-loader-title { display: none !important; }
+      .msg-box {
+        width: 80%;
+        margin: 0 auto;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+      }
+      /* Custom Start Button if the default one is hidden */
+      #start-btn {
+        position: fixed;
+        bottom: 50px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 15px 30px;
+        background: #4CC3D9;
+        color: white;
+        border: none;
+        border-radius: 30px;
+        font-weight: bold;
+        z-index: 2000;
+      }
     </style>
   </head>
   <body>
 
-    <div id="debug-ui">
-      Status: Initializing...<br>
-      WebXR Support: Checking...<br>
-      HTTPS: Checking...
+    <!-- This button helps if the default AR button is hard to see -->
+    <button id="start-btn">ENTER AR MODE</button>
+
+    <div id="overlay">
+      <div class="msg-box" id="instructions">
+        Slowly move your phone to scan the floor...
+      </div>
     </div>
 
-    <!-- 
-      loading-screen="enabled: false" removes the blue screen 
-    -->
     <a-scene 
-      loading-screen="enabled: false"
-      webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: #debug-ui;"
-      renderer="alpha: true;">
+      webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: #overlay;"
+      renderer="alpha: true; antialias: true;">
       
-      <a-entity id="reticle" ar-hit-test="target: #reticle;">
-        <a-ring rotation="-90 0 0" radius-inner="0.08" radius-outer="0.12" color="cyan"></a-ring>
+      <a-light type="ambient" intensity="0.6"></a-light>
+      <a-light type="directional" position="1 2 1" intensity="0.8"></a-light>
+
+      <!-- The Reticle (Floor Marker) -->
+      <a-entity id="reticle" ar-hit-test="target: #reticle; type: footprint;" visible="false">
+        <a-ring rotation="-90 0 0" radius-inner="0.06" radius-outer="0.1" color="#00FF00" line-width="2"></a-ring>
+        <a-circle rotation="-90 0 0" radius="0.02" color="#00FF00"></a-circle>
       </a-entity>
 
-      <a-box id="box" visible="false" scale="0.2 0.2 0.2" material="color: red;"></a-box>
+      <!-- The Box to be placed -->
+      <a-box id="placed-object" 
+             visible="false" 
+             scale="0.2 0.2 0.2" 
+             material="color: #FF9500; metalness: 0.4; roughness: 0.3;">
+      </a-box>
 
       <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-      const status = document.getElementById('debug-ui');
       const scene = document.querySelector('a-scene');
-      
-      // 1. Check HTTPS
-      const isHttps = window.location.protocol === 'https:';
-      
-      // 2. Check WebXR Support
-      const hasWebXR = navigator.xr !== undefined;
+      const startBtn = document.getElementById('start-btn');
+      const reticle = document.getElementById('reticle');
+      const object = document.getElementById('placed-object');
+      const instructions = document.getElementById('instructions');
+      const overlay = document.getElementById('overlay');
 
-      function updateDebug() {
-        status.innerHTML = `
-          HTTPS: ${isHttps ? "✅ YES" : "❌ NO (AR will fail)"}<br>
-          WebXR API: ${hasWebXR ? "✅ YES" : "❌ NO (Use Chrome/Safari)"}<br>
-          Mode: ${scene.is('ar-mode') ? "ACTIVE AR" : "Waiting for 'Enter AR' click..."}
-        `;
-      }
+      // 1. Manually trigger AR mode when button is clicked
+      startBtn.addEventListener('click', () => {
+        scene.enterVR(); // This triggers the AR request
+      });
 
-      setInterval(updateDebug, 500);
+      // 2. When AR starts
+      scene.addEventListener('enter-vr', () => {
+        if (scene.is('ar-mode')) {
+          startBtn.style.display = 'none'; // Hide start button
+          overlay.style.display = 'block'; // Show instructions
+        }
+      });
 
-      // Placement Logic
+      // 3. Detect when the floor is found
+      // We check every frame if the reticle is visible
+      setInterval(() => {
+        if (scene.is('ar-mode')) {
+          if (reticle.getAttribute('visible') === true) {
+            instructions.innerHTML = "Floor Detected!<br>Tap screen to place box.";
+            instructions.style.background = "rgba(0, 150, 0, 0.7)";
+          } else {
+            instructions.innerHTML = "Scanning for floor...<br>Try pointing at a rug or textured surface.";
+            instructions.style.background = "rgba(0, 0, 0, 0.7)";
+          }
+        }
+      }, 500);
+
+      // 4. Placement Logic
       scene.addEventListener('click', () => {
-        const reticle = document.getElementById('reticle');
-        const box = document.getElementById('box');
-        if (reticle.getAttribute('visible')) {
-          box.setAttribute('position', reticle.getAttribute('position'));
-          box.setAttribute('visible', 'true');
+        if (reticle.getAttribute('visible') === true) {
+          const pos = reticle.getAttribute('position');
+          object.setAttribute('position', pos);
+          object.setAttribute('visible', 'true');
+          
+          // Animation effect
+          object.setAttribute('animation', {
+            property: 'scale',
+            from: '0 0 0',
+            to: '0.2 0.2 0.2',
+            dur: 300
+          });
         }
       });
     </script>
