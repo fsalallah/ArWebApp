@@ -1,102 +1,22 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta charset="utf-8">
-    <title>AR Placement Fix</title>
-    <!-- Using 1.6.0 which has the latest fixes for the black screen bug -->
-    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <style>
-      #ar-instructions {
-        position: fixed;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 9999;
-        background: rgba(0,0,0,0.6);
-        color: white;
-        padding: 10px;
-        border-radius: 10px;
-        font-family: sans-serif;
-        text-align: center;
-        pointer-events: none;
-        display: none; /* Hidden until AR starts */
-      }
-    </style>
+    <title>My First AR Project</title>
+    <!-- Include A-Frame -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <!-- Include AR.js for A-Frame -->
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   </head>
-  <body style="margin: 0; overflow: hidden;">
-
-    <div id="ar-instructions">
-      Scanning... Move phone slowly.<br>
-      Tap when you see the blue ring.
-    </div>
-
-    <!-- 
-      CRITICAL FIXES:
-      1. renderer="alpha: true; antialias: true; colorManagement: true;"
-      2. loading-screen="enabled: false"
-      3. No <a-sky> or background colors
-    -->
-    <a-scene 
-      webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: #ar-instructions;"
-      renderer="alpha: true; antialias: true; colorManagement: true;"
-      loading-screen="enabled: false"
-      vr-mode-ui="enabled: true">
-      
-      <a-light type="ambient" intensity="0.8"></a-light>
-      <a-light type="directional" position="1 2 1" intensity="0.5"></a-light>
-
-      <!-- The Reticle (The ring that finds the floor) -->
-      <a-entity id="reticle" ar-hit-test="target: #reticle; type: footprint;" visible="false">
-        <a-ring rotation="-90 0 0" radius-inner="0.07" radius-outer="0.1" color="#4CC3D9"></a-ring>
-      </a-entity>
-
-      <!-- The Object (A simple box) -->
-      <a-box id="placed-object" 
-             visible="false" 
-             scale="0.2 0.2 0.2" 
-             material="color: #FF4B4B; metalness: 0.5; roughness: 0.2;">
-      </a-box>
-
+  <body style="margin: 0px; overflow: hidden;">
+    <!-- Define the AR Scene -->
+    <a-scene embedded arjs>
+      <!-- Define the Marker (Hiro is the default) -->
+      <a-marker preset="hiro">
+        <!-- The 3D object to show: A blue box -->
+        <a-box position="0 0.5 0" material="color: blue;" animation="property: rotation; to: 0 360 0; loop: true; dur: 3000"></a-box>
+      </a-marker>
+      <!-- Define the Camera -->
       <a-entity camera></a-entity>
     </a-scene>
-
-    <script>
-      const scene = document.querySelector('a-scene');
-      const instructions = document.getElementById('ar-instructions');
-      const reticle = document.getElementById('reticle');
-      const object = document.getElementById('placed-object');
-
-      // Show instructions when AR starts
-      scene.addEventListener('enter-vr', () => {
-        if (scene.is('ar-mode')) {
-          instructions.style.display = 'block';
-        }
-      });
-
-      // Placement Logic
-      scene.addEventListener('click', () => {
-        if (reticle.getAttribute('visible')) {
-          // Get the position where the reticle found the floor
-          const tapPos = reticle.getAttribute('position');
-          
-          // Move the box there and make it visible
-          object.setAttribute('position', tapPos);
-          object.setAttribute('visible', 'true');
-          
-          // Change instruction
-          instructions.innerHTML = "Object Placed!<br>Tap elsewhere to move it.";
-        }
-      });
-
-      // Update instructions if floor is found
-      setInterval(() => {
-        if (scene.is('ar-mode') && reticle.getAttribute('visible')) {
-          if(instructions.innerHTML.includes("Scanning")) {
-             instructions.innerHTML = "Floor Found!<br>Tap to place the Red Box.";
-             instructions.style.background = "rgba(0, 100, 0, 0.8)";
-          }
-        }
-      }, 500);
-    </script>
   </body>
 </html>
