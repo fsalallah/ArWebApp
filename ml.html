@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Laptop Markerless AR</title>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <style>
+      #overlay {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        font-family: sans-serif;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body style="margin: 0; overflow: hidden;">
+
+    <div id="overlay">
+      1. Click "Enter AR" (Bottom Right)<br>
+      2. Move camera to find floor<br>
+      3. Click to place Camping Model
+    </div>
+
+    <!-- 
+      renderer="colorManagement: true" fixes the black object issue.
+      xr-mode-ui allows the "Enter AR" button to show up.
+    -->
+    <a-scene 
+      webxr="requiredFeatures: hit-test, local-floor;"
+      renderer="colorManagement: true; alpha: true;"
+      cursor="rayOrigin: mouse"
+      raycaster="objects: .raycastable">
+
+      <a-assets>
+        <!-- Ensure Camping.glb is in your GitHub folder -->
+        <a-asset-item id="campingModel" src="Camping.glb"></a-asset-item>
+      </a-assets>
+
+      <!-- Lighting -->
+      <a-entity light="type: ambient; intensity: 1.0;"></a-entity>
+      <a-entity light="type: directional; position: 1 2 1; intensity: 1.0;"></a-entity>
+
+      <!-- The Reticle (The "Ring" that follows the floor) -->
+      <!-- This component 'ar-hit-test' is built into A-Frame 1.6.0 -->
+      <a-entity id="reticle" ar-hit-test="target: #model-container; type: footprint;" visible="false">
+        <a-ring rotation="-90 0 0" radius-inner="0.1" radius-outer="0.15" color="#00FF00"></a-ring>
+      </a-entity>
+
+      <!-- Container for the model -->
+      <a-entity id="model-container" visible="false">
+        <a-gltf-model 
+          src="#campingModel" 
+          scale="0.2 0.2 0.2"
+          position="0 0 0">
+        </a-gltf-model>
+      </a-entity>
+
+      <a-entity camera></a-entity>
+    </a-scene>
+
+    <script>
+      const scene = document.querySelector('a-scene');
+      const reticle = document.getElementById('reticle');
+      const modelContainer = document.getElementById('model-container');
+      const overlay = document.getElementById('overlay');
+
+      // When the user clicks the screen in AR mode
+      scene.addEventListener('click', function () {
+        if (reticle.getAttribute('visible')) {
+          // Get the position from the reticle
+          const position = reticle.getAttribute('position');
+          
+          // Place the model there
+          modelContainer.setAttribute('position', position);
+          modelContainer.setAttribute('visible', 'true');
+          
+          overlay.innerHTML = "Object Placed!";
+          setTimeout(() => { overlay.style.display = 'none'; }, 2000);
+        }
+      });
+
+      // Check if AR is actually supported
+      scene.addEventListener('enter-vr', () => {
+        if (!scene.is('ar-mode')) {
+          overlay.innerHTML = "Error: AR Mode not entered. Use a compatible browser.";
+        } else {
+          overlay.innerHTML = "AR Active. Look at the floor.";
+        }
+      });
+    </script>
+  </body>
+</html>
