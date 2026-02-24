@@ -2,80 +2,110 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Honor Deep Diagnostic</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Honor AR Overlay Fix</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* This ensures the UI stays visible during AR */
+        #ar-ui { z-index: 9999; pointer-events: none; }
+        .log-entry { pointer-events: auto; background: rgba(0,0,0,0.7); margin-bottom: 2px; padding: 4px; border-radius: 4px; }
+    </style>
 </head>
-<body class="bg-black text-white">
-    <div id="ui" class="p-6">
-        <h1 class="text-xl font-bold mb-4">WebXR Deep Scan</h1>
-        <button id="run" class="w-full bg-blue-600 py-4 rounded-xl font-bold mb-4">RUN DIAGNOSTIC</button>
-        <div id="log" class="font-mono text-xs bg-gray-900 p-4 rounded-lg border border-gray-700 h-96 overflow-y-auto">
-            > Tap button to start...
+<body class="bg-black">
+    <!-- This div will be projected into the AR session -->
+    <div id="ar-ui" class="fixed inset-0 p-4 flex flex-col pointer-events-none">
+        <div id="header" class="bg-blue-600 text-white p-3 rounded-t-xl font-bold text-center pointer-events-auto">
+            HONOR AR DIAGNOSTIC
         </div>
+        <div id="log-container" class="flex-1 bg-black/50 overflow-y-auto p-2 font-mono text-[10px] text-white pointer-events-auto border-x border-b border-blue-600/30">
+            > Waiting for start...
+        </div>
+        <button id="start-btn" class="mt-4 bg-blue-500 text-white py-4 rounded-xl font-bold pointer-events-auto shadow-lg">
+            START AR SESSION
+        </button>
     </div>
 
     <script>
-        const logEl = document.getElementById('log');
-        function log(msg, color = "text-gray-400") {
-            logEl.innerHTML += `<div class="${color}">> ${msg}</div>`;
-            logEl.scrollTop = logEl.scrollHeight;
+        const logContainer = document.getElementById('log-container');
+        const startBtn = document.getElementById('start-btn');
+
+        function log(msg, color = "text-gray-300") {
+            const div = document.createElement('div');
+            div.className = `log-entry ${color}`;
+            div.innerHTML = `> ${msg}`;
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
         }
 
-        document.getElementById('run').onclick = async () => {
-            log("Starting Scan...", "text-white");
-
-            if (!navigator.xr) {
-                log("FAIL: WebXR not found in navigator", "text-red-500");
-                return;
-            }
-
+        async function initAR() {
+            log("Initializing...", "text-yellow-400");
+            
             try {
-                // We request ALL features to force the driver to wake up
+                // We request the session with 'dom-overlay' 
+                // This is what prevents the "Black Screen" from hiding our text
                 const session = await navigator.xr.requestSession('immersive-ar', {
-                    requiredFeatures: ['local'],
-                    optionalFeatures: ['viewer', 'local-floor', 'unbounded', 'dom-overlay'],
-                    domOverlay: { root: document.body }
+                    optionalFeatures: ['local', 'viewer', 'local-floor', 'dom-overlay'],
+                    domOverlay: { root: document.getElementById('ar-ui') }
                 });
 
-                log("SESSION: Granted", "text-green-500");
+                log("SESSION GRANTED", "text-green-400");
+                startBtn.style.display = 'none';
 
-                const spaces = ['local', 'viewer', 'local-floor', 'unbounded'];
-                
-                for (const space of spaces) {
+                const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+                renderer.xr.enabled = true;
+                await renderer.xr.setSession(session);
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera();
+
+                // Try to find a working space
+                const spaces = ['local', 'viewer', 'local-floor'];
+                let activeSpace = null;
+
+                for (const spaceType of spaces) {
                     try {
-                        log(`Testing Space: ${space}...`);
-                        const refSpace = await session.requestReferenceSpace(space);
-                        log(`SUCCESS: ${space} is supported!`, "text-blue-400");
-                        
-                        // If one works, we try to start the loop
-                        startAR(session, refSpace);
-                        return; 
+                        log(`Testing: ${spaceType}...`);
+                        activeSpace = await session.requestReferenceSpace(spaceType);
+                        log(`SUCCESS: ${spaceType} found!`, "text-blue-400");
+                        break; // Stop at the first one that works
                     } catch (e) {
-                        log(`FAIL: ${space} (${e.name})`, "text-red-400");
+                        log(`FAIL: ${spaceType}`, "text-red-400");
                     }
                 }
 
-                log("RESULT: No reference spaces supported.", "text-red-600");
-                log("This usually means ARCore is not set as the default AR provider.", "text-yellow-500");
+                if (!activeSpace) {
+                    log("CRITICAL: No spaces supported", "text-red-600");
+                    return;
+                }
 
-            } catch (e) {
-                log("SESSION ERROR: " + e.message, "text-red-500");
+                // Add a small cube so we know if tracking is actually working
+                const mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+                    new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true })
+                );
+                mesh.position.set(0, 0, -0.5); // 50cm in front of camera
+                scene.add(mesh);
+
+                log("Rendering started. Look for green box.", "text-green-500");
+
+                renderer.setAnimationLoop(() => {
+                    mesh.rotation.y += 0.02;
+                    renderer.render(scene, camera);
+                });
+
+                session.addEventListener('end', () => {
+                    log("Session ended by system/user", "text-yellow-500");
+                    location.reload();
+                });
+
+            } catch (err) {
+                log("ERROR: " + err.message, "text-red-500");
+                console.error(err);
             }
-        };
-
-        function startAR(session, refSpace) {
-            log("Attempting to start renderer...", "text-green-500");
-            const renderer = new THREE.WebGLRenderer({ alpha: true });
-            renderer.xr.enabled = true;
-            renderer.xr.setSession(session);
-            
-            document.getElementById('ui').style.display = 'none';
-            
-            renderer.setAnimationLoop(() => {
-                renderer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
-            });
         }
+
+        startBtn.addEventListener('click', initAR);
     </script>
 </body>
 </html>
