@@ -1,30 +1,40 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Marker AR - GLTF Model</title>
+    <title>Marker AR - Fixed Lighting</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   </head>
   
   <body style="margin: 0px; overflow: hidden;">
     
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
+    <!-- 
+      FIX 1: added 'renderer="colorManagement: true;"' 
+      This makes the textures and lights look realistic instead of black/dark.
+    -->
+    <a-scene 
+      embedded 
+      arjs="sourceType: webcam; debugUIEnabled: false;"
+      renderer="colorManagement: true; lightingDataLP: true;">
 
-      <!-- 1. ASSET MANAGEMENT SYSTEM -->
       <a-assets>
-        <!-- Replace 'my_model.glb' with your actual file name -->
-        <!-- If using an external link, ensure it is HTTPS -->
         <a-asset-item id="myModel" src="Camping.glb"></a-asset-item>
       </a-assets>
 
-      <!-- 2. THE HIRO MARKER -->
+      <!-- 
+        FIX 2: Global Lights 
+        Ambient light hits every side of the model so it isn't pitch black.
+        Directional light acts like the 'Sun' to create highlights.
+      -->
+      <a-entity light="type: ambient; intensity: 1.5;"></a-entity>
+      <a-entity light="type: directional; castShadow: true; intensity: 1.0; position: 1 2 1;"></a-entity>
+
       <a-marker preset="hiro">
         
         <!-- 
-          3. THE GLTF MODEL 
-          - 'src' points to the ID in <a-assets>
-          - 'scale' is VERY important. Most models are huge. 
-          - Start with 0.1 0.1 0.1 and adjust.
+          FIX 3: Material override (Optional)
+          If the model is STILL dark, we can force it to ignore shadows 
+          by adding 'material="shader: flat;"' (but try without it first).
         -->
         <a-gltf-model 
           src="#myModel" 
@@ -33,9 +43,6 @@
           rotation="0 0 0"
           animation="property: rotation; to: 0 360 0; loop: true; dur: 10000">
         </a-gltf-model>
-
-        <!-- Optional: A light specifically for the model -->
-        <a-light type="directional" position="0 1 1" intensity="0.5"></a-light>
 
       </a-marker>
 
