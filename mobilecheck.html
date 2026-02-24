@@ -2,87 +2,80 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Honor AR Final Fix</title>
+    <title>Honor Deep Diagnostic</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-black">
-    <div id="ui" class="fixed inset-0 z-50 flex flex-col items-center justify-center p-6">
-        <div class="bg-gray-900 border border-gray-700 p-6 rounded-2xl shadow-2xl w-full max-w-xs text-center">
-            <h1 class="text-white font-bold mb-4">Honor AR Debug</h1>
-            <button id="go" class="bg-blue-600 text-white w-full py-4 rounded-xl font-bold active:bg-blue-700">
-                START CAMERA
-            </button>
-            <div id="status" class="mt-4 text-[10px] font-mono text-left bg-black p-3 rounded border border-gray-800 h-40 overflow-auto">
-                > Ready...
-            </div>
+<body class="bg-black text-white">
+    <div id="ui" class="p-6">
+        <h1 class="text-xl font-bold mb-4">WebXR Deep Scan</h1>
+        <button id="run" class="w-full bg-blue-600 py-4 rounded-xl font-bold mb-4">RUN DIAGNOSTIC</button>
+        <div id="log" class="font-mono text-xs bg-gray-900 p-4 rounded-lg border border-gray-700 h-96 overflow-y-auto">
+            > Tap button to start...
         </div>
     </div>
 
     <script>
-        const btn = document.getElementById('go');
-        const status = document.getElementById('status');
-
+        const logEl = document.getElementById('log');
         function log(msg, color = "text-gray-400") {
-            status.innerHTML += `<div class="${color}">> ${msg}</div>`;
-            status.scrollTop = status.scrollHeight;
+            logEl.innerHTML += `<div class="${color}">> ${msg}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
         }
 
-        async function start() {
-            log("Step 1: Requesting Session...");
+        document.getElementById('run').onclick = async () => {
+            log("Starting Scan...", "text-white");
+
+            if (!navigator.xr) {
+                log("FAIL: WebXR not found in navigator", "text-red-500");
+                return;
+            }
+
             try {
-                // We request ONLY 'viewer' space. 
-                // This is the most basic mode that exists.
+                // We request ALL features to force the driver to wake up
                 const session = await navigator.xr.requestSession('immersive-ar', {
-                    optionalFeatures: ['dom-overlay'],
+                    requiredFeatures: ['local'],
+                    optionalFeatures: ['viewer', 'local-floor', 'unbounded', 'dom-overlay'],
                     domOverlay: { root: document.body }
                 });
 
-                log("Step 2: Session Granted", "text-green-400");
+                log("SESSION: Granted", "text-green-500");
 
-                const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-                renderer.xr.enabled = true;
+                const spaces = ['local', 'viewer', 'local-floor', 'unbounded'];
                 
-                // IMPORTANT: We must set the session BEFORE asking for space
-                await renderer.xr.setSession(session);
-                log("Step 3: Renderer Linked");
+                for (const space of spaces) {
+                    try {
+                        log(`Testing Space: ${space}...`);
+                        const refSpace = await session.requestReferenceSpace(space);
+                        log(`SUCCESS: ${space} is supported!`, "text-blue-400");
+                        
+                        // If one works, we try to start the loop
+                        startAR(session, refSpace);
+                        return; 
+                    } catch (e) {
+                        log(`FAIL: ${space} (${e.name})`, "text-red-400");
+                    }
+                }
 
-                const scene = new THREE.Scene();
-                const camera = new THREE.PerspectiveCamera();
-                
-                // Add a simple red box
-                const box = new THREE.Mesh(
-                    new THREE.BoxGeometry(0.2, 0.2, 0.2),
-                    new THREE.MeshBasicMaterial({ color: 0xff0000 })
-                );
-                box.position.z = -0.5; // Half a meter away
-                scene.add(box);
-
-                log("Step 4: Requesting Viewer Space...");
-                // 'viewer' is the "fail-safe" space. 
-                // If this fails, the ARCore service is likely frozen.
-                const refSpace = await session.requestReferenceSpace('viewer');
-                
-                log("Step 5: Success! Starting Loop", "text-blue-400");
-                document.getElementById('ui').style.display = 'none';
-
-                renderer.setAnimationLoop(() => {
-                    box.rotation.y += 0.01;
-                    renderer.render(scene, camera);
-                });
+                log("RESULT: No reference spaces supported.", "text-red-600");
+                log("This usually means ARCore is not set as the default AR provider.", "text-yellow-500");
 
             } catch (e) {
-                log("CRITICAL ERROR:", "text-red-500");
-                log(e.name + ": " + e.message, "text-red-400");
-                
-                if (e.name === "InvalidStateError") {
-                    log("FIX: Try restarting your phone or updating 'Google Play Services for AR' in the Play Store.", "text-yellow-500");
-                }
+                log("SESSION ERROR: " + e.message, "text-red-500");
             }
-        }
+        };
 
-        btn.addEventListener('click', start);
+        function startAR(session, refSpace) {
+            log("Attempting to start renderer...", "text-green-500");
+            const renderer = new THREE.WebGLRenderer({ alpha: true });
+            renderer.xr.enabled = true;
+            renderer.xr.setSession(session);
+            
+            document.getElementById('ui').style.display = 'none';
+            
+            renderer.setAnimationLoop(() => {
+                renderer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+            });
+        }
     </script>
 </body>
 </html>
