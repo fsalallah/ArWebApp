@@ -2,52 +2,92 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Lab 04: Markerless WebAR</title>
+    <title>MSC-301: Markerless AR</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <style>
+      #overlay {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        pointer-events: none; /* Allows clicks to pass through to the scene */
+        font-family: sans-serif;
+        text-align: center;
+        color: white;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      }
+      .instructions {
+        background: rgba(0,0,0,0.6);
+        padding: 10px 20px;
+        border-radius: 20px;
+      }
+    </style>
   </head>
   <body>
+
+    <div id="overlay">
+      <div class="instructions">
+        1. Click 'AR' Button (Bottom Right)<br>
+        2. Scan floor until ring appears<br>
+        3. Tap screen to place box
+      </div>
+    </div>
+
     <!-- 
-      'webxr' attribute enables hit-testing. 
-      'ar-hit-test' tells the camera to look for surfaces.
+      'hit-test' feature is required for markerless floor detection 
     -->
     <a-scene 
-      webxr="requiredFeatures: hit-test; optionalFeatures: dom-overlay; overlayElement: #overlay"
-      ar-hit-test="target: #my-object; type: footprint;">
+      webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay; overlayElement: #overlay;"
+      reflection="directionalLight: #dirlight;">
       
       <a-assets>
-        <!-- You can replace this with a 3D model later -->
+        <!-- No external assets needed for this demo -->
       </a-assets>
 
-      <!-- The Object: Initially hidden until placed -->
-      <a-entity id="my-object" visible="false">
-        <a-box 
-          position="0 0.5 0" 
-          scale="0.5 0.5 0.5" 
-          material="color: #4CC3D9; opacity: 0.9;"
-          animation="property: rotation; to: 0 360 0; loop: true; dur: 5000">
-        </a-box>
+      <a-light id="dirlight" intensity="1" position="1 2 1"></a-light>
+
+      <!-- 
+        THE RETICLE 
+        This ring follows the floor surfaces. 
+        'ar-hit-test' moves this entity automatically.
+      -->
+      <a-entity id="reticle" ar-hit-test="target: #reticle; type: footprint;">
+        <a-ring rotation="-90 0 0" radius-inner="0.1" radius-outer="0.15" color="#00FF00"></a-ring>
       </a-entity>
+
+      <!-- 
+        THE CONTENT
+        We will move this to the reticle's position when the user clicks.
+      -->
+      <a-box id="placed-object" 
+             visible="false" 
+             position="0 0.25 0" 
+             scale="0.5 0.5 0.5" 
+             material="color: #4CC3D9; metalness: 0.5; roughness: 0.2;">
+      </a-box>
 
       <a-entity camera></a-entity>
     </a-scene>
 
-    <!-- UI Overlay for instructions -->
-    <div id="overlay" style="position: fixed; bottom: 20px; width: 100%; text-align: center; font-family: sans-serif;">
-      <button id="place-button" style="padding: 12px 24px; border-radius: 25px; border: none; bg: white; font-weight: bold;">
-        Enter AR & Tap Floor to Place
-      </button>
-    </div>
-
     <script>
       const scene = document.querySelector('a-scene');
-      const object = document.querySelector('#my-object');
-      
-      // When the user taps the screen in AR mode
-      scene.addEventListener('click', () => {
-        if (scene.is('ar-mode')) {
-          // The hit-test component automatically moves the 'target' entity
-          // We just need to make it visible once the user decides where to put it
+      const reticle = document.querySelector('#reticle');
+      const object = document.querySelector('#placed-object');
+
+      // Listen for the 'click' or 'tap' on the screen
+      scene.addEventListener('click', function () {
+        if (reticle.getAttribute('visible') === true) {
+          // 1. Get the current position of the reticle (on the floor)
+          const newPos = reticle.getAttribute('position');
+          
+          // 2. Move our box to that position
+          object.setAttribute('position', newPos);
+          
+          // 3. Make the box visible
           object.setAttribute('visible', 'true');
+          
+          console.log("Object placed at:", newPos);
         }
       });
     </script>
