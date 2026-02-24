@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Lab: Markerless WebAR</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <!-- 
+      'webxr' attribute enables hit-testing. 
+      'ar-hit-test' tells the camera to look for surfaces.
+    -->
+    <a-scene 
+      webxr="requiredFeatures: hit-test; optionalFeatures: dom-overlay; overlayElement: #overlay"
+      ar-hit-test="target: #my-object; type: footprint;">
+      
+      <a-assets>
+        <!-- You can replace this with a 3D model later -->
+      </a-assets>
+
+      <!-- The Object: Initially hidden until placed -->
+      <a-entity id="my-object" visible="false">
+        <a-box 
+          position="0 0.5 0" 
+          scale="0.5 0.5 0.5" 
+          material="color: #4CC3D9; opacity: 0.9;"
+          animation="property: rotation; to: 0 360 0; loop: true; dur: 5000">
+        </a-box>
+      </a-entity>
+
+      <a-entity camera></a-entity>
+    </a-scene>
+
+    <!-- UI Overlay for instructions -->
+    <div id="overlay" style="position: fixed; bottom: 20px; width: 100%; text-align: center; font-family: sans-serif;">
+      <button id="place-button" style="padding: 12px 24px; border-radius: 25px; border: none; bg: white; font-weight: bold;">
+        Enter AR & Tap Floor to Place
+      </button>
+    </div>
+
+    <script>
+      const scene = document.querySelector('a-scene');
+      const object = document.querySelector('#my-object');
+      
+      // When the user taps the screen in AR mode
+      scene.addEventListener('click', () => {
+        if (scene.is('ar-mode')) {
+          // The hit-test component automatically moves the 'target' entity
+          // We just need to make it visible once the user decides where to put it
+          object.setAttribute('visible', 'true');
+        }
+      });
+    </script>
+  </body>
+</html>
