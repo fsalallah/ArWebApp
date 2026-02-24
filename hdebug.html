@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Honor AR Fix</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white">
+    <div id="overlay" class="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 text-center bg-gray-900">
+        <h1 class="text-2xl font-bold mb-2">Honor AR Debugger</h1>
+        <p id="status-text" class="mb-6 text-sm text-gray-400">Waiting for user...</p>
+        
+        <button id="ar-button" class="bg-green-600 px-10 py-5 rounded-2xl font-bold mb-4 shadow-xl active:scale-95 transition-transform">
+            START AR SESSION
+        </button>
+        
+        <div id="log" class="text-left text-xs mt-4 font-mono bg-black p-4 rounded w-full max-w-md overflow-auto max-h-40 border border-gray-700">
+            > System Ready...
+        </div>
+    </div>
+
+    <script>
+        const button = document.getElementById('ar-button');
+        const statusText = document.getElementById('status-text');
+        const logElement = document.getElementById('log');
+
+        function log(msg, isError = false) {
+            const color = isError ? 'text-red-400' : 'text-green-400';
+            logElement.innerHTML += `<div class="${color}">> ${msg}</div>`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(msg);
+        }
+
+        async function startAR() {
+            log("Initializing WebXR...");
+            
+            if (!navigator.xr) {
+                log("Error: WebXR not found", true);
+                return;
+            }
+
+            try {
+                // Request session with minimal required features to avoid immediate crashes
+                const session = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['local'], // 'local' is standard for ARCore
+                    optionalFeatures: ['hit-test', 'dom-overlay'],
+                    domOverlay: { root: document.body }
+                });
+
+                log("Session acquired!");
+
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.xr.enabled = true;
+                
+                // CRITICAL: Set the session before requesting reference space
+                await renderer.xr.setSession(session);
+                log("Renderer linked to XR");
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+                // Add a bright light and a test object
+                const light = new THREE.PointLight(0xffffff, 1, 100);
+                light.position.set(0, 2, 2);
+                scene.add(light);
+                scene.add(new THREE.AmbientLight(0x404040));
+
+                // Place a floating cube 0.5 meters in front of the start position
+                const cube = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+                    new THREE.MeshPhongMaterial({ color: 0x00ff00 })
+                );
+                cube.position.set(0, 0, -0.5); 
+                scene.add(cube);
+                log("3D Scene Prepared");
+
+                // Try to get the reference space with a fallback
+                let refSpace;
+                try {
+                    // Try 'local' first (standard world tracking)
+                    refSpace = await session.requestReferenceSpace('local');
+                    log("Using 'local' tracking");
+                } catch (e) {
+                    log("Fallback: 'local' failed, trying 'viewer'", true);
+                    // Fallback to 'viewer' (object will be stuck to camera, but camera feed will work)
+                    refSpace = await session.requestReferenceSpace('viewer');
+                }
+
+                document.getElementById('overlay').style.display = 'none';
+
+                renderer.setAnimationLoop((timestamp, frame) => {
+                    // Rotate the cube so we know the app hasn't frozen
+                    cube.rotation.y += 0.01;
+                    renderer.render(scene, camera);
+                });
+
+                session.addEventListener("end", () => {
+                    log("Session ended");
+                    window.location.reload();
+                });
+
+            } catch (err) {
+                log("FATAL ERROR: " + err.name, true);
+                log(err.message, true);
+                statusText.textContent = "Failed to start AR.";
+            }
+        }
+
+        button.addEventListener('click', startAR);
+    </script>
+</body>
+</html>
