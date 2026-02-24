@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebXR Compatibility Tester</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .status-card {
+            transition: all 0.3s ease;
+        }
+        .supported { border-left: 8px solid #10b981; background-color: #f0fdf4; }
+        .not-supported { border-left: 8px solid #ef4444; background-color: #fef2f2; }
+        .checking { border-left: 8px solid #f59e0b; background-color: #fffbeb; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-8 font-sans">
+    <div class="max-w-2xl mx-auto">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">WebXR Device Tester</h1>
+            <p class="text-gray-600">Checking compatibility for your Honor Foldable</p>
+        </header>
+
+        <div id="results" class="space-y-4">
+            <!-- WebXR API Support -->
+            <div id="api-check" class="status-card checking p-6 rounded-lg shadow-sm">
+                <h2 class="text-xl font-semibold mb-1">WebXR API</h2>
+                <p id="api-status" class="text-gray-700 italic">Checking for navigator.xr...</p>
+            </div>
+
+            <!-- Immersive VR Support -->
+            <div id="vr-check" class="status-card checking p-6 rounded-lg shadow-sm">
+                <h2 class="text-xl font-semibold mb-1">Immersive VR</h2>
+                <p id="vr-status" class="text-gray-700 italic">Checking VR capabilities...</p>
+                <p class="text-xs text-gray-500 mt-2">Required for VR headsets/Cardboard mode.</p>
+            </div>
+
+            <!-- Immersive AR Support -->
+            <div id="ar-check" class="status-card checking p-6 rounded-lg shadow-sm">
+                <h2 class="text-xl font-semibold mb-1">Immersive AR (Augmented Reality)</h2>
+                <p id="ar-status" class="text-gray-700 italic">Checking AR capabilities...</p>
+                <p class="text-xs text-gray-500 mt-2">Required for placing 3D objects in your real room.</p>
+            </div>
+        </div>
+
+        <div class="mt-8 p-6 bg-white rounded-lg shadow-md">
+            <h3 class="font-bold text-lg mb-3">Device Info</h3>
+            <ul class="space-y-2 text-sm text-gray-600">
+                <li><strong>Browser:</strong> <span id="user-agent"></span></li>
+                <li><strong>Screen:</strong> <span id="screen-res"></span></li>
+                <li><strong>Fold State:</strong> <span class="italic text-blue-600">Note: WebXR works best on the large inner screen.</span></li>
+            </ul>
+        </div>
+
+        <footer class="mt-8 text-center text-gray-400 text-xs">
+            WebXR requires a secure (HTTPS) connection and a compatible browser like Chrome.
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById('user-agent').textContent = navigator.userAgent;
+        document.getElementById('screen-res').textContent = window.innerWidth + " x " + window.innerHeight;
+
+        async function checkWebXR() {
+            const apiCard = document.getElementById('api-check');
+            const apiStatus = document.getElementById('api-status');
+            
+            const vrCard = document.getElementById('vr-check');
+            const vrStatus = document.getElementById('vr-status');
+            
+            const arCard = document.getElementById('ar-check');
+            const arStatus = document.getElementById('ar-status');
+
+            // 1. Check if the API exists
+            if ('xr' in navigator) {
+                apiCard.className = "status-card supported p-6 rounded-lg shadow-sm";
+                apiStatus.textContent = "✅ WebXR API is available in this browser.";
+
+                // 2. Check for VR Support
+                try {
+                    const vrSupported = await navigator.xr.isSessionSupported('immersive-vr');
+                    if (vrSupported) {
+                        vrCard.className = "status-card supported p-6 rounded-lg shadow-sm";
+                        vrStatus.textContent = "✅ Supported: This device can run Virtual Reality experiences.";
+                    } else {
+                        vrCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
+                        vrStatus.textContent = "❌ Not Supported: Immersive VR is not available.";
+                    }
+                } catch (e) {
+                    vrCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
+                    vrStatus.textContent = "❌ Error checking VR: " + e.message;
+                }
+
+                // 3. Check for AR Support
+                try {
+                    const arSupported = await navigator.xr.isSessionSupported('immersive-ar');
+                    if (arSupported) {
+                        arCard.className = "status-card supported p-6 rounded-lg shadow-sm";
+                        arStatus.textContent = "✅ Supported: This device can run Augmented Reality (AR) experiences.";
+                    } else {
+                        arCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
+                        arStatus.textContent = "❌ Not Supported: ARCore might be missing or disabled.";
+                    }
+                } catch (e) {
+                    arCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
+                    arStatus.textContent = "❌ Error checking AR: " + e.message;
+                }
+
+            } else {
+                apiCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
+                apiStatus.textContent = "❌ WebXR API not found. Please use Chrome or a Chromium-based browser.";
+                
+                vrCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
+                vrStatus.textContent = "❌ Not Available";
+                
+                arCard.className = "status-card not-supported p-6 rounded-lg shadow-sm";
+                arStatus.textContent = "❌ Not Available";
+            }
+        }
+
+        // Run check on load
+        checkWebXR();
+    </script>
+</body>
+</html>
