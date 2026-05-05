@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AR Apartment Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #1a1a2e; height: 100%; }
+  
+  #cameraVideo {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    z-index: 0;
+    display: none;
+  }
+  #cameraVideo.active { display: block; }
+  
+  canvas { position: relative; z-index: 1; }
+  
+  #header {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+    padding: 14px 18px; color: #fff;
+    background: linear-gradient(180deg, rgba(0,0,0,0.7), transparent);
+    pointer-events: none;
+  }
+  #header h1 { font-size: 18px; font-weight: 600; }
+  #header p { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+
+  #infoCard {
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+    background: rgba(20, 20, 35, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top-left-radius: 24px; border-top-right-radius: 24px;
+    padding: 18px 20px 24px;
+    color: #fff;
+    box-shadow: 0 -4px 30px rgba(0,0,0,0.4);
+    transition: transform 0.3s ease;
+    max-height: 60vh; overflow-y: auto;
+  }
+  #infoCard.collapsed { transform: translateY(calc(100% - 64px)); }
+  #infoCard.hidden { transform: translateY(100%); }
+  
+  .drag-handle {
+    width: 40px; height: 4px; background: #555;
+    border-radius: 2px; margin: 0 auto 12px;
+    cursor: pointer;
+  }
+  
+  .price-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px;
+  }
+  .price { font-size: 26px; font-weight: 700; color: #4cd4ff; }
+  .badge {
+    background: #4caf50; color: white;
+    padding: 4px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 600;
+  }
+  
+  .title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .address { font-size: 13px; opacity: 0.7; margin-bottom: 14px; }
+  
+  .stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin-bottom: 14px;
+  }
+  .stat {
+    background: rgba(255,255,255,0.06);
+    padding: 10px; border-radius: 10px; text-align: center;
+  }
+  .stat-icon { font-size: 18px; margin-bottom: 4px; }
+  .stat-value { font-size: 15px; font-weight: 600; }
+  .stat-label { font-size: 10px; opacity: 0.6; margin-top: 2px; text-transform: uppercase; }
+  
+  .features {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+  }
+  .feature {
+    background: rgba(76, 212, 255, 0.15);
+    color: #4cd4ff;
+    padding: 5px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 500;
+  }
+  
+  .rooms-list {
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px; padding: 10px 12px;
+    font-size: 12px; line-height: 1.7;
+  }
+  .rooms-list strong { color: #4cd4ff; }
+  
+  #controls {
+    position: absolute; top: 70px; right: 14px; z-index: 10;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .ctrl-btn {
+    width: 44px; height: 44px;
+    background: rgba(20, 20, 35, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    color: white; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .ctrl-btn:active { transform: scale(0.92); background: rgba(76, 212, 255, 0.3); }
+  
+  #arButton {
+    position: absolute; top: 70px; left: 14px; z-index: 10;
+    background: linear-gradient(135deg, #4cd4ff, #2980b9);
+    color: white; border: none; padding: 10px 16px;
+    border-radius: 22px; font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(76, 212, 255, 0.4);
+    display: flex; align-items: center; gap: 6px;
+  }
+  
+  #arHint {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.75); color: white;
+    padding: 12px 20px; border-radius: 20px;
+    font-size: 14px; text-align: center;
+    z-index: 11;
+    pointer-events: none;
+    max-width: 80%;
+  }
+  
+  #arExit {
+    position: absolute; top: 16px; right: 14px;
+    background: rgba(0,0,0,0.7); color: white;
+    border: none; padding: 8px 14px;
+    border-radius: 18px; font-size: 13px;
+    cursor: pointer; z-index: 11;
+    display: none;
+  }
+  #arExit.active { display: block; }
+  
+  .loading {
+    position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center;
+    color: white; z-index: 100;
+    background: #1a1a2e;
+  }
+  
+  #errorModal {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 200;
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #errorModal.active { display: flex; }
+  .modal-box {
+    background: #2a2a3e; color: white;
+    padding: 24px; border-radius: 16px;
+    max-width: 90%; text-align: center;
+  }
+  .modal-box h3 { margin-bottom: 10px; color: #ff6b6b; }
+  .modal-box p { font-size: 13px; line-height: 1.5; margin-bottom: 16px; opacity: 0.9; }
+  .modal-box button {
+    background: #4cd4ff; color: #000; border: none;
+    padding: 10px 22px; border-radius: 20px;
+    font-weight: 600; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<video id="cameraVideo" autoplay playsinline muted></video>
+
+<div id="header">
+  <h1>🏠 Modern Loft Apartment</h1>
+  <p>Drag to rotate • Pinch to zoom • Tap AR for camera mode</p>
+</div>
+
+<button id="arButton">📱 View in AR</button>
+<button id="arExit">✕ Exit AR</button>
+
+<div id="controls">
+  <button class="ctrl-btn" id="rotateBtn" title="Auto-rotate">🔄</button>
+  <button class="ctrl-btn" id="resetBtn" title="Reset view">⟲</button>
+  <button class="ctrl-btn" id="toggleRoof" title="Toggle roof">🏠</button>
+</div>
+
+<div id="arHint" style="display:none;"></div>
+
+<div id="infoCard">
+  <div class="drag-handle"></div>
+  <div class="price-row">
+    <div class="price">$485,000</div>
+    <div class="badge">FOR SALE</div>
+  </div>
+  <div class="title">2-Bedroom Modern Loft</div>
+  <div class="address">📍 142 Riverside Avenue, Downtown</div>
+  
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-icon">📐</div>
+      <div class="stat-value">1,250</div>
+      <div class="stat-label">sq ft</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">🛏️</div>
+      <div class="stat-value">2</div>
+      <div class="stat-label">Bedrooms</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">🚿</div>
+      <div class="stat-value">1</div>
+      <div class="stat-label">Bathroom</div>
+    </div>
+  </div>
+  
+  <div class="features">
+    <span class="feature">✓ Open Kitchen</span>
+    <span class="feature">✓ Hardwood Floors</span>
+    <span class="feature">✓ City View</span>
+    <span class="feature">✓ AC</span>
+    <span class="feature">✓ Pet Friendly</span>
+  </div>
+  
+  <div class="rooms-list">
+    <strong>Living Room</strong> · 18×14 ft — Sofa, TV, large window<br>
+    <strong>Kitchen</strong> · 12×10 ft — Stove, fridge, dining for 4<br>
+    <strong>Master Bedroom</strong> · 14×12 ft — Queen bed, wardrobe<br>
+    <strong>Bathroom</strong> · 8×6 ft — Bathtub, vanity
+  </div>
+</div>
+
+<div class="loading" id="loading">Loading 3D model…</div>
+
+<div id="errorModal">
+  <div class="modal-box">
+    <h3 id="errMsgTitle">Camera Error</h3>
+    <p id="errMsgText"></p>
+    <button onclick="document.getElementById('errorModal').classList.remove('active')">OK</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---- Scene ----
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 100);
+camera.position.set(1.2, 1.0, 1.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+// ---- Lighting ----
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444466, 0.8);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(2, 4, 3);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 0.1;
+sun.shadow.camera.far = 10;
+sun.shadow.camera.left = -2;
+sun.shadow.camera.right = 2;
+sun.shadow.camera.top = 2;
+sun.shadow.camera.bottom = -2;
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+// ---- Procedural Textures ----
+function makeWoodTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 128, 0);
+  g.addColorStop(0, '#a87c4f'); g.addColorStop(0.5, '#c19465'); g.addColorStop(1, '#9c6f42');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 20; i++) {
+    ctx.strokeStyle = `rgba(80,40,15,${Math.random() * 0.35})`;
+    ctx.lineWidth = 0.5 + Math.random();
+    ctx.beginPath();
+    const y = Math.random() * 128;
+    ctx.moveTo(0, y);
+    ctx.bezierCurveTo(40, y + Math.random()*8-4, 80, y + Math.random()*8-4, 128, y + Math.random()*8-4);
+    ctx.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+function makeTileTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ece9dc'; ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = '#bbb'; ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, 64, 64); ctx.strokeRect(64, 0, 64, 64);
+  ctx.strokeRect(0, 64, 64, 64); ctx.strokeRect(64, 64, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+const woodTex = makeWoodTexture();
+const tileTex = makeTileTexture();
+
+// ---- Apartment Model ----
+const apartment = new THREE.Group();
+const W = 1.4, D = 1.0, H = 0.3, WT = 0.02;
+
+const base = new THREE.Mesh(
+  new THREE.BoxGeometry(W + 0.06, 0.04, D + 0.06),
+  new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.7 })
+);
+base.position.y = -0.02;
+base.receiveShadow = true;
+apartment.add(base);
+
+function addFloor(x, z, w, d, tex, repeat) {
+  const m = new THREE.MeshStandardMaterial({ map: tex.clone(), roughness: 0.6 });
+  m.map.wrapS = m.map.wrapT = THREE.RepeatWrapping;
+  m.map.repeat.set(repeat, repeat);
+  const f = new THREE.Mesh(new THREE.PlaneGeometry(w, d), m);
+  f.rotation.x = -Math.PI/2;
+  f.position.set(x, 0.001, z);
+  f.receiveShadow = true;
+  apartment.add(f);
+}
+addFloor(-0.35, 0, 0.7, 1, woodTex, 4);
+addFloor(0.35, 0, 0.7, 1, tileTex, 3);
+
+const wallMat = new THREE.MeshStandardMaterial({ color: 0xf0ead6, roughness: 0.95 });
+function addWall(x, y, z, w, h, d) {
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  wall.position.set(x, y, z);
+  wall.castShadow = true;
+  wall.receiveShadow = true;
+  apartment.add(wall);
+}
+
+const wallH = H;
+addWall(0, wallH/2, -D/2, W, wallH, WT);
+addWall(-0.4, wallH/2, D/2, 0.6, wallH, WT);
+addWall(0.45, wallH/2, D/2, 0.5, wallH, WT);
+addWall(-W/2, wallH/2, 0, WT, wallH, D);
+addWall(W/2, wallH/2, 0, WT, wallH, D);
+addWall(0, wallH/2, -0.35, WT, wallH, 0.3);
+addWall(0, wallH/2, 0.2, WT, wallH, 0.6);
+addWall(-0.5, wallH/2, -0.2, 0.2, wallH, WT);
+addWall(-0.1, wallH/2, -0.2, 0.1, wallH, WT);
+addWall(0.2, wallH/2, -0.1, 0.4, wallH, WT);
+addWall(0.55, wallH/2, -0.1, 0.1, wallH, WT);
+
+function miniBox(w, h, d, color, x, y, z, roughness = 0.7) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color, roughness })
+  );
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  apartment.add(m);
+  return m;
+}
+
+// Living Room
+const sofa = new THREE.Group();
+const sb = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.05, 0.09), new THREE.MeshStandardMaterial({ color: 0x4a5d6e }));
+sb.position.y = 0.025;
+const sba = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.07, 0.025), new THREE.MeshStandardMaterial({ color: 0x4a5d6e }));
+sba.position.set(0, 0.06, -0.03);
+sofa.add(sb, sba);
+sofa.position.set(-0.55, 0, 0.3);
+sofa.rotation.y = Math.PI/2;
+sofa.children.forEach(c => c.castShadow = true);
+apartment.add(sofa);
+
+miniBox(0.12, 0.04, 0.06, 0xa87c4f, -0.4, 0.02, 0.3);
+miniBox(0.16, 0.05, 0.04, 0x222222, -0.22, 0.025, 0.37);
+const tv = new THREE.Mesh(
+  new THREE.BoxGeometry(0.14, 0.08, 0.005),
+  new THREE.MeshStandardMaterial({ color: 0x111122, emissive: 0x223355, emissiveIntensity: 0.4 })
+);
+tv.position.set(-0.22, 0.11, 0.378);
+apartment.add(tv);
+
+const rug = new THREE.Mesh(
+  new THREE.CircleGeometry(0.15, 24),
+  new THREE.MeshStandardMaterial({ color: 0x884466 })
+);
+rug.rotation.x = -Math.PI/2;
+rug.position.set(-0.4, 0.002, 0.3);
+apartment.add(rug);
+
+miniBox(0.03, 0.04, 0.03, 0x885533, -0.6, 0.02, 0.1);
+const leaves = new THREE.Mesh(
+  new THREE.SphereGeometry(0.04, 10, 8),
+  new THREE.MeshStandardMaterial({ color: 0x336633 })
+);
+leaves.position.set(-0.6, 0.07, 0.1);
+leaves.castShadow = true;
+apartment.add(leaves);
+
+// Bedroom
+const bed = new THREE.Group();
+const bf = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.21), new THREE.MeshStandardMaterial({ color: 0xa87c4f }));
+bf.position.y = 0.015;
+const matt = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.025, 0.2), new THREE.MeshStandardMaterial({ color: 0xfafafa }));
+matt.position.y = 0.042;
+const blank = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.005, 0.14), new THREE.MeshStandardMaterial({ color: 0x4477aa }));
+blank.position.set(0, 0.057, 0.03);
+const headb = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.09, 0.01), new THREE.MeshStandardMaterial({ color: 0xa87c4f }));
+headb.position.set(0, 0.06, -0.105);
+const pill = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.012, 0.04), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+pill.position.set(0, 0.062, -0.07);
+bed.add(bf, matt, blank, headb, pill);
+bed.children.forEach(c => c.castShadow = true);
+bed.position.set(-0.5, 0, -0.35);
+apartment.add(bed);
+
+miniBox(0.05, 0.05, 0.04, 0x6b4423, -0.36, 0.025, -0.3);
+const lamp = new THREE.Mesh(
+  new THREE.ConeGeometry(0.018, 0.025, 12),
+  new THREE.MeshStandardMaterial({ color: 0xffd699, emissive: 0xffaa55, emissiveIntensity: 0.6 })
+);
+lamp.position.set(-0.36, 0.07, -0.3);
+apartment.add(lamp);
+miniBox(0.15, 0.22, 0.06, 0x6b4423, -0.1, 0.11, -0.44);
+
+// Kitchen
+const counterMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 });
+const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.085, 0.4), counterMat);
+c1.position.set(0.65, 0.043, 0.2); c1.castShadow = true; apartment.add(c1);
+const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.085, 0.06), counterMat);
+c2.position.set(0.45, 0.043, 0.42); c2.castShadow = true; apartment.add(c2);
+
+const sink = new THREE.Mesh(
+  new THREE.BoxGeometry(0.05, 0.01, 0.04),
+  new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.7, roughness: 0.2 })
+);
+sink.position.set(0.64, 0.09, 0.3);
+apartment.add(sink);
+
+const stove = new THREE.Mesh(
+  new THREE.BoxGeometry(0.07, 0.005, 0.06),
+  new THREE.MeshStandardMaterial({ color: 0x111111 })
+);
+stove.position.set(0.4, 0.09, 0.42);
+apartment.add(stove);
+
+miniBox(0.08, 0.19, 0.07, 0xeeeeee, 0.64, 0.095, -0.05);
+
+miniBox(0.15, 0.008, 0.09, 0xa87c4f, 0.25, 0.075, 0.2);
+for (let lx = -0.06; lx <= 0.06; lx += 0.12) {
+  for (let lz = -0.035; lz <= 0.035; lz += 0.07) {
+    miniBox(0.006, 0.075, 0.006, 0x6b4423, 0.25 + lx, 0.0375, 0.2 + lz);
+  }
+}
+function miniChair(x, z) {
+  miniBox(0.04, 0.005, 0.04, 0x553322, x, 0.045, z);
+  miniBox(0.04, 0.05, 0.005, 0x553322, x, 0.07, z - 0.018);
+}
+miniChair(0.25, 0.13); miniChair(0.25, 0.27);
+miniChair(0.18, 0.2); miniChair(0.32, 0.2);
+
+// Bathroom
+miniBox(0.04, 0.04, 0.06, 0xffffff, 0.64, 0.02, -0.4);
+miniBox(0.04, 0.05, 0.02, 0xffffff, 0.64, 0.045, -0.43);
+miniBox(0.06, 0.08, 0.04, 0xffffff, 0.15, 0.04, -0.43);
+
+const tub = new THREE.Mesh(
+  new THREE.BoxGeometry(0.15, 0.05, 0.07),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 })
+);
+tub.position.set(0.38, 0.025, -0.43);
+tub.castShadow = true;
+apartment.add(tub);
+const water = new THREE.Mesh(
+  new THREE.BoxGeometry(0.14, 0.005, 0.06),
+  new THREE.MeshPhysicalMaterial({ color: 0x66aadd, transparent: true, opacity: 0.7 })
+);
+water.position.set(0.38, 0.045, -0.43);
+apartment.add(water);
+
+// Roof
+const roof = new THREE.Group();
+const roofMat = new THREE.MeshStandardMaterial({ color: 0x8b4444, roughness: 0.8 });
+const roofTop = new THREE.Mesh(new THREE.BoxGeometry(W + 0.04, 0.02, D + 0.04), roofMat);
+roofTop.position.y = H + 0.01;
+roofTop.castShadow = true;
+roof.add(roofTop);
+const pitch = new THREE.Mesh(
+  new THREE.ConeGeometry(0.85, 0.2, 4),
+  new THREE.MeshStandardMaterial({ color: 0x6b3333, roughness: 0.8 })
+);
+pitch.position.y = H + 0.12;
+pitch.rotation.y = Math.PI / 4;
+pitch.scale.set(1, 1, 0.7);
+pitch.castShadow = true;
+roof.add(pitch);
+roof.visible = false;
+apartment.add(roof);
+
+// Windows
+function addMiniWindow(x, y, z, w, h, rotY = 0) {
+  const f = new THREE.Mesh(
+    new THREE.BoxGeometry(w + 0.01, h + 0.01, 0.005),
+    new THREE.MeshStandardMaterial({ color: 0x553311 })
+  );
+  const g = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, 0.003),
+    new THREE.MeshPhysicalMaterial({ color: 0x88ccee, transparent: true, opacity: 0.5, transmission: 0.6 })
+  );
+  const grp = new THREE.Group();
+  grp.add(f, g);
+  grp.position.set(x, y, z);
+  grp.rotation.y = rotY;
+  apartment.add(grp);
+}
+addMiniWindow(-0.5, 0.16, D/2 - 0.005, 0.18, 0.12);
+addMiniWindow(-0.4, 0.16, -D/2 + 0.005, 0.14, 0.12);
+addMiniWindow(0.5, 0.16, D/2 - 0.005, 0.14, 0.12);
+addMiniWindow(W/2 - 0.005, 0.16, 0.2, 0.14, 0.12, Math.PI/2);
+
+// Labels
+function makeLabel(text, color) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  const r = 28;
+  ctx.moveTo(r, 4); ctx.lineTo(256-r, 4);
+  ctx.arc(256-r, 32, r, -Math.PI/2, Math.PI/2);
+  ctx.lineTo(r, 60);
+  ctx.arc(r, 32, r, Math.PI/2, -Math.PI/2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 28px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 128, 34);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+  const sp = new THREE.Sprite(mat);
+  sp.scale.set(0.18, 0.045, 1);
+  return sp;
+}
+
+const labels = new THREE.Group();
+const livingLabel = makeLabel('Living Room', '#2980b9');
+livingLabel.position.set(-0.35, 0.4, 0.25);
+labels.add(livingLabel);
+const bedLabel = makeLabel('Bedroom', '#8e44ad');
+bedLabel.position.set(-0.35, 0.4, -0.35);
+labels.add(bedLabel);
+const kitchenLabel = makeLabel('Kitchen', '#27ae60');
+kitchenLabel.position.set(0.35, 0.4, 0.25);
+labels.add(kitchenLabel);
+const bathLabel = makeLabel('Bathroom', '#e67e22');
+bathLabel.position.set(0.35, 0.4, -0.35);
+labels.add(bathLabel);
+apartment.add(labels);
+
+scene.add(apartment);
+
+// ---- OrbitControls ----
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.15, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 0.6;
+controls.maxDistance = 4;
+controls.maxPolarAngle = Math.PI / 2 - 0.05;
+controls.update();
+
+// ---- Camera-based AR Mode ----
+let arMode = false;
+let cameraStream = null;
+const videoEl = document.getElementById('cameraVideo');
+const arBtn = document.getElementById('arButton');
+const arExit = document.getElementById('arExit');
+const arHint = document.getElementById('arHint');
+const infoCard = document.getElementById('infoCard');
+
+function showError(title, message) {
+  document.getElementById('errMsgTitle').textContent = title;
+  document.getElementById('errMsgText').innerHTML = message;
+  document.getElementById('errorModal').classList.add('active');
+}
+
+async function startAR() {
+  // Try camera-based AR (works without WebXR/ARCore)
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } },
+      audio: false
+    });
+    videoEl.srcObject = cameraStream;
+    videoEl.classList.add('active');
+    
+    // Make scene background transparent
+    scene.background = null;
+    renderer.setClearColor(0x000000, 0);
+    
+    arMode = true;
+    arBtn.style.display = 'none';
+    arExit.classList.add('active');
+    
+    // Move camera & apartment for AR feel
+    camera.position.set(0.6, 0.5, 0.8);
+    controls.target.set(0, 0.1, 0);
+    controls.update();
+    apartment.scale.setScalar(0.8);
+    
+    // Hint
+    arHint.style.display = 'block';
+    arHint.innerHTML = '✓ Camera AR Mode<br>Drag to rotate • Pinch to zoom';
+    setTimeout(() => { arHint.style.display = 'none'; }, 3500);
+    
+    // Collapse info card to minimize UI
+    infoCard.classList.add('collapsed');
+    
+  } catch (e) {
+    let msg = 'Could not access camera. ';
+    if (e.name === 'NotAllowedError') {
+      msg += 'Please grant camera permission and try again.';
+    } else if (e.name === 'NotFoundError') {
+      msg += 'No camera found on this device.';
+    } else if (location.protocol === 'file:') {
+      msg = 'Camera access requires HTTPS.<br><br>You opened this file directly. Please host it online (GitHub Pages, Netlify) and open via https:// URL, OR use the 3D viewer mode (without AR).';
+    } else if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      msg = 'Camera access requires <b>HTTPS</b>. You are using <b>' + location.protocol + '</b>. Please serve this page over HTTPS.';
+    } else {
+      msg += e.message;
+    }
+    showError('Camera AR Unavailable', msg);
+  }
+}
+
+function stopAR() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  videoEl.classList.remove('active');
+  videoEl.srcObject = null;
+  scene.background = new THREE.Color(0x1a1a2e);
+  arMode = false;
+  arBtn.style.display = 'flex';
+  arExit.classList.remove('active');
+  apartment.scale.setScalar(1);
+  camera.position.set(1.2, 1.0, 1.5);
+  controls.target.set(0, 0.15, 0);
+  controls.update();
+  infoCard.classList.remove('collapsed');
+}
+
+arBtn.addEventListener('click', startAR);
+arExit.addEventListener('click', stopAR);
+
+// ---- Buttons ----
+let autoRotate = false;
+document.getElementById('rotateBtn').addEventListener('click', () => {
+  autoRotate = !autoRotate;
+  controls.autoRotate = autoRotate;
+  controls.autoRotateSpeed = 1.5;
+  document.getElementById('rotateBtn').style.background = autoRotate ? 'rgba(76,212,255,0.4)' : 'rgba(20,20,35,0.85)';
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (arMode) {
+    camera.position.set(0.6, 0.5, 0.8);
+    controls.target.set(0, 0.1, 0);
+  } else {
+    camera.position.set(1.2, 1.0, 1.5);
+    controls.target.set(0, 0.15, 0);
+  }
+  controls.update();
+});
+
+document.getElementById('toggleRoof').addEventListener('click', () => {
+  roof.visible = !roof.visible;
+  labels.visible = !roof.visible;
+  document.getElementById('toggleRoof').style.background = roof.visible ? 'rgba(76,212,255,0.4)' : 'rgba(20,20,35,0.85)';
+});
+
+const handle = infoCard.querySelector('.drag-handle');
+handle.addEventListener('click', () => {
+  infoCard.classList.toggle('collapsed');
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+document.getElementById('loading').style.display = 'none';
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
